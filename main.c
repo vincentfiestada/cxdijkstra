@@ -9,7 +9,7 @@ Student Number: 2013-69155
 BS Computer Science, University of the Philippines Diliman
 Contact: vffiestada@up.edu.ph
 ******************************************************************************/
-#include "headers.h"
+#include "cardinal.h"
 
 #define STRINGMAX 100
 #define INPUTFILENAME "graphmatrix.txt"
@@ -21,26 +21,32 @@ Contact: vffiestada@up.edu.ph
 #define ERR_INPUT_NVERTICES_INSUFF 201
 
 /*
-   The heap implementation of a Priority Queue
-   here is an just a single array of Vertices, each
-   with an ID and a Cost (referred to as key in E.P. Quiwa)
+   Data structure type defs for PriorityQueue (min-heap) and Graph
 */
 
-typedef struct
+typedef struct Vertex
 {
-    int ID; // identifies the vertex
-    unsigned int Cost;
+    int VRTX;
+    int COST;
+    struct Vertex * NEXT;
 } Vertex;
 
 typedef struct
 {
-    unsigned int N; // number of vertices
-    unsigned int * Cost;
-    unsigned int * Pred;
-    unsigned int * Dist;
+    Vertex ** List; // supposed to be an array of linked lists
+    int * pred;
+    int * dist;
+    unsigned int n;
 } Graph;
 
-void initPQ(Graph * G, Vertex * PQ, int s);
+typedef struct
+{
+    int * heap;
+    int * index;
+    int * key;
+} PriorityQueue;
+
+void AnnihilateList(Vertex * listhead);
 
 int main()
 {
@@ -51,9 +57,10 @@ int main()
     printf("\n!++++++++++++++++++++++++++++++++++++++++++++++++++++!\n");
 
     int numberOfVertices = 0;
-	int i,j; // For loop iterators
-	char temp[STRINGMAX] = ""; // For file reading
+	int i, j; // For loop iterators
+    int tempInt;
 	FILE * inputFile = fopen(INPUTFILENAME, "r"); // open a stream to the file
+    int EOF_Err_Counter = 0;
 
 	if (!inputFile) // Handle errors in opening the file stream
 	{
@@ -68,97 +75,103 @@ int main()
 		exit(ERR_INPUT_NVERTICES_INSUFF);
 	}
 
-    // Declare variables that are dependent on the numberOfVertices being intialized
+    // Initialize graph
+	Graph * G = malloc(sizeof(Graph));
+    Vertex * list[numberOfVertices];
+    for (i = 0; i < numberOfVertices; i++)
+    {
+        list[i] = NULL;
+    }
+    int pred[numberOfVertices];
+    int dist[numberOfVertices];
+    G->List = list;
+    G->pred = pred;
+    G->dist = dist;
+    G->n = numberOfVertices;
 
-	unsigned int Cost[numberOfVertices][numberOfVertices]; // Cost Adjacency matrix
+    // Declare Priority Queue (min-heap); stores class 2
+    PriorityQueue * PQ = malloc(sizeof(PriorityQueue));
 
 	// Read the rest of the file
 	for (i = 0; i < numberOfVertices; i++) // Read {numberOfVertices} Rows
 	{
 		for (j = 0; j < numberOfVertices; j++) // Read {numberOfVertices} Columns
 		{
-			fscanf(inputFile, "%d", &Cost[i][j]);
+			fscanf(inputFile, "%d", &tempInt);
+            if (j != i)
+            {
+                Vertex * v = malloc(sizeof(Vertex));
+                v->VRTX = j;
+                v->COST = tempInt;
+                v->NEXT = NULL;
+
+                // If list is empty, make head
+                if (list[i] == NULL)
+                {
+                    list[i] = v;
+                }
+                else // else, traverse until tail is found
+                {
+                    Vertex * temp = list[i];
+                    while (temp->NEXT)
+                    {
+                        temp = temp->NEXT;
+                    }
+                    temp->NEXT = v;
+                }
+            }
 			if (feof(inputFile)) // Check if end-of-file indicator is set to true
 			{
-				fprintf(stderr, "\nFATAL ERR: Reached EOF unexpectedly.\n");
-				exit(ERR_INPUTFILE_CORRUPT_LINES);
+                EOF_Err_Counter++; // During testing, it seems that EOF may be triggered
+                                   //  prematurely based on the formatting of the text file
+                if (EOF_Err_Counter > 1)
+                {
+                    // If End Of File has been reached twice, then raise an error
+				    fprintf(stderr, "\nFATAL ERR: Reached EOF unexpectedly.\n");
+				    exit(ERR_INPUTFILE_CORRUPT_LINES);
+                }
 			}
 		}
 	}
 
 	fclose(inputFile); // IMPORTANT: close the file stream
 
-	// Print input
-    printf("\nReading input from file '%s'...", INPUTFILENAME);
-    printf("\nCOST ADJACENCY MATRIX OF %d VERTICES:\n", numberOfVertices);
-	for (i = 0; i < numberOfVertices; i++)
-	{
-		for (j = 0; j < numberOfVertices; j++)
-		{
-			printf("%d ", Cost[i][j]);
-		}
-		printf("\n");
-	}
+    // Print G->List
 
-    Vertex * PQ[numberOfVertices + 1]; // Priority Queue or min-heap
-    unsigned int Pred[numberOfVertices];
-    unsigned int Dist[numberOfVertices];
-    Graph * G = malloc(sizeof(Graph)); // data about the Graph itself
-    G->N = numberOfVertices;
-    G->Cost = (unsigned int *)Cost;
-    G->Pred = Pred;
-    G->Dist = Dist;
-
-    for (i = 0; i < numberOfVertices + 1; i++) // Populate the pool of vertices for PQ
+    Vertex * temp;
+    for (i = 0; i < G->n; i++)
     {
-        PQ[i] = malloc(sizeof(Vertex));
+        printf("Vertex %d:\n", i);
+        temp = list[i];
+        while (temp)
+        {
+            printf("\tCost to %d: %d\n", temp->VRTX, temp->COST);
+            temp = temp->NEXT;
+        }
     }
 
-    // CLEAN UP; Free up the memory allocated for vertices and the struct G
-    for (i = 0; i < numberOfVertices; i++)
+    // Clean up before exiting
+    printf("\nBegin Cleanup Process...\n");
+    printf("Iterating over list of pointers at %d...\n", list);
+    for (i = 0; i < G->n; i++)
     {
-        free(PQ[i]);
+        AnnihilateList(list[i]);
     }
+    printf("Freeing graph at %d...\n", G);
     free(G);
-    printf("\n");
+    printf("Freeing priority queue at %d...\n", PQ);
+    free(PQ);
     return 0;
 }
 
-void initPQ(Graph * G, Vertex * PQ, int s)
+void AnnihilateList(Vertex * listhead)
 {
-    unsigned int i = 0;
-    unsigned int v;
-    for (v = 0; v < G->N; v++)
+    Vertex * temp1;
+    while (listhead)
     {
-        if (v == s)
-        {
-            PQ->ID = s; // PQ.heap(1) <- s;
-            PQ->Cost = 0; // PQ.key(s) <- 0;
-        }
-        else
-        {
-            i++; // i <- i + 1
-            Vertex * alpha = PQ + i*(sizeof(Vertex *));
-            alpha->ID = v; // PQ.heap(i) <- v;
-            alpha->Cost = INFINITY; // PQ.key(v) = Infinity;
-        }
-        PQ[G->N]->ID = -1; // The negative ID serves as a sort of terminating element
-        // It is used to find out PQ's size or if it is empty
-    }
-}
-
-Vertex * ExtractMin(Vertex * PQ)
-{
-    Vertex * j;
-    Vertex * alpha;
-    if (PQ->ID == -1)
-    {
-        // PQ is empty if first element is the terminator
-        fprintf(stderr, "\nPriority Queue Underflow");
-    }
-    else
-    {
-        j = PQ; // Get root of heap
-        // Now find the last element before the 
+        temp1 = listhead->NEXT;
+        printf("Freeing vertex (data: VRTX = %d; COST = %d;) at %d...\n", listhead->VRTX, listhead->COST, listhead);
+        free(listhead);
+        listhead = temp1;
     }
 }
