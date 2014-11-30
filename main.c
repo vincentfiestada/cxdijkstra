@@ -15,12 +15,13 @@ Git Repo: https://github.com/vincentfiestada/cxdijkstra.git
 
 #define STRINGMAX 100
 #define INPUTFILENAME "graphmatrix.txt"
+#define INFINITE 9999
 // Error code constants
 #define ERR_INPUTFILE_CANNOTOPEN 100
 #define ERR_INPUTFILE_CORRUPT_LINE 101
 #define ERR_INPUTFILE_CORRUPT_LINES 102
 #define ERR_INPUT_NVERTICES_INSUFF 201
-#define ERR_PQ_UNDERFLOW 302
+#define ERR_PQ_UNDERFLOW 301
 
 /*
    Data structure type defs for PriorityQueue (min-heap) and Graph
@@ -49,6 +50,13 @@ typedef struct
     int sizePQ;
 } PriorityQueue;
 
+typedef struct // simplified stack implementation (sequential)
+{
+    int * Vector; // pointer to int array where stack data is stored
+    unsigned int Length; // number of currently occupied slots
+    unsigned int Capacity; // Max length
+} Stack;
+
 void AnnihilateList(Vertex * listhead);
 int ExtractMin(PriorityQueue * PQ);
 void PQUnderflow();
@@ -56,7 +64,11 @@ void Heapify(PriorityQueue * PQ, int r);
 void DecreaseKey(PriorityQueue * PQ, int l, int newkey);
 bool isEmptyPQ(PriorityQueue * PQ);
 void InitPQ(Graph * G, PriorityQueue * PQ, int s);
+void StackOverflow();
+void StackUnderflow();
 void Dijkstra(Graph * G, PriorityQueue * PQ, int s);
+void PushToStack(Stack * S, int data);
+int PopFromStack(Stack * S);
 
 int main()
 {
@@ -119,7 +131,7 @@ int main()
             {
                 Vertex * v = malloc(sizeof(Vertex));
                 v->VRTX = j;
-                v->COST = tempInt;
+                v->COST = (tempInt == 0) ? INFINITE : tempInt;
                 v->NEXT = NULL;
 
                 // If list is empty, make head
@@ -158,21 +170,43 @@ int main()
     // Run dijkstra's algorithm and print G->List
 
     int s, p;
+    Stack predecessorTraceback; // For tracing back the path to a vector
+    int pT_vector[G->n]; // maximum of N ancestors will be stored
+    predecessorTraceback.Vector = pT_vector;
+    predecessorTraceback.Length = 0;
+    predecessorTraceback.Capacity = G->n;
+
     for (s = 1; s <= G->n; s++)
     {
         Dijkstra(G, PQ, s);
-        printf("\nDIJKSTRA RESULTS::Vertex %d:\n", s);
+        printf("\nDIJKSTRA RESULTS >> Vertex %d as Source:\n", s);
         printf("----------------------------\n");
         for (j = 1; j <= G->n; j++)
         {
+            predecessorTraceback.Length = 0; // reset stack
             if (j != s)
             {
-                printf("   Vertex %d to %d: cost = %d\n", s, j, dist[j]);
-                printf("                  pred = %d\n\n", pred[j]);
+                printf("   Vertex %d to %d: ", s, j);
+                PushToStack(&predecessorTraceback, j);
+                p = pred[j];
+                while (p)
+                {
+                    PushToStack(&predecessorTraceback, p);
+                    p = pred[p];
+                }
+                // Now print the stack
+                while (predecessorTraceback.Length > 0)
+                {
+                    printf("%d", PopFromStack(&predecessorTraceback));
+                    if (predecessorTraceback.Length > 0)
+                    {
+                        printf(" -> ");
+                    }
+                }
+                printf(" (cost = %d)\n", dist[j]);
             }
         }
     }
-    
 
     // Clean up before exiting
     //printf("\n$ Begin Cleanup Process...\n");
@@ -235,7 +269,17 @@ bool isEmptyPQ(PriorityQueue * PQ)
 
 void PQUnderflow()
 {
-    fprintf(stderr, "ERR: Priority Queue Underflow: The min-heap is empty.\n");
+    fprintf(stderr, "\nERR: Priority Queue Underflow: The min-heap is empty.\n");
+}
+
+void StackOverflow()
+{
+    fprintf(stderr, "\nERR: Stack Overflow: The stack is full. Push operation cancelled.\n");
+}
+
+void StackUnderflow()
+{
+    fprintf(stderr, "\nERR: Stack Underflow: The stack is empty. Pop operation cancelled.\n");
 }
 
 void Heapify(PriorityQueue * PQ, int r)
@@ -273,6 +317,31 @@ void Heapify(PriorityQueue * PQ, int r)
 
     PQ->heap[i] = l;
     PQ->index[l] = i;
+}
+
+void PushToStack(Stack * S, int data)
+{
+    if (S->Length == S->Capacity) // If length is same as capacity, stack is full
+    {
+        StackOverflow();
+    }
+    else
+    {
+        S->Vector[S->Length++] = data;
+    }
+}
+
+int PopFromStack(Stack * S)
+{
+    if (S->Length == 0) // Check if stack is empty; cancel if yes
+    {
+        StackUnderflow();
+        return -1;
+    }
+    else
+    {
+        return S->Vector[--S->Length];
+    }
 }
 
 void DecreaseKey(PriorityQueue * PQ, int l, int newkey)
@@ -315,7 +384,7 @@ void InitPQ(Graph * G, PriorityQueue * PQ, int s)
             i++;
             PQ->heap[i] = v;
             PQ->index[v] = i;
-            PQ->key[v] = 9999;
+            PQ->key[v] = INFINITE;
         }
     }
     PQ->sizePQ = G->n;
@@ -354,9 +423,9 @@ void Dijkstra(Graph * G, PriorityQueue * PQ, int s)
     {
         //printf("\n+++++++++++++++++++++++++++++++++++");
         u = ExtractMin(PQ);
-        if (PQ->key[u] == 9999)
+        if (PQ->key[u] == INFINITE)
         {
-            fprintf(stderr, "WRNG: No more edges to consider. Dijkstra exiting...");
+            fprintf(stderr, "WRNG: No more edges to consider. Dijkstra returning...");
             return;
         }
         //printf("\n%d",u);
@@ -365,7 +434,7 @@ void Dijkstra(Graph * G, PriorityQueue * PQ, int s)
         {
             //printf("\n----------------------------------");
             v = alpha->VRTX;
-            newval = (PQ->key[u] >= 9999) ? alpha->COST : PQ->key[u] + alpha->COST;
+            newval = (PQ->key[u] >= INFINITE) ? alpha->COST : PQ->key[u] + alpha->COST;
             //printf("\n > %d %d %d", v, PQ->key[v], newval);
             if (PQ->key[v] > newval)
             {
