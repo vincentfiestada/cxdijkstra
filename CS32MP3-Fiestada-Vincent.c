@@ -9,7 +9,7 @@ Student Number: 2013-69155
 BS Computer Science, University of the Philippines Diliman
 Contact: vffiestada@up.edu.ph
 
-Git Repo: https://github.com/vincentfiestada/cxdijkstra.git
+Git Repo: https://github.com/vincentfiestada/cxdijkstra.git {see quiwa branch}
 ******************************************************************************/
 #include "cardinal.h"
 
