@@ -1,0 +1,2 @@
+Wikimedia Foundation (n.d.) Dijkstra's algorithm. Wikipedia: The Free Encyclopedia. Retrieved November, 2014 from http://en.wikipedia.org/wiki/Dijkstra%27s_algorithm.
+Quiwa, E. P. (2007) Data Structures. Electronics Hobbyists Pub. House: Manila, Philippines.

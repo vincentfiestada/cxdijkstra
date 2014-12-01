@@ -22,41 +22,44 @@ Git Repo: https://github.com/vincentfiestada/cxdijkstra.git
 #define ERR_INPUTFILE_CORRUPT_LINES 102
 #define ERR_INPUT_NVERTICES_INSUFF 201
 #define ERR_PQ_UNDERFLOW 301
+// Define DEBUG when debugging to enable preliminary outputs
+// #define DEBUG
 
 /*
    Data structure type defs for PriorityQueue (min-heap) and Graph
 */
 
-typedef struct Vertex
+typedef struct Vertex // G.List(1:n) is an array of linked lists of Vertex structs
 {
-    int VRTX;
-    int COST;
+    int VRTX; // "name" of the Vertex (1, 2, 3, ..., n)
+    int COST; // cost or weight of the path from the src to the Vertex
     struct Vertex * NEXT;
 } Vertex;
 
 typedef struct
 {
     Vertex ** List; // supposed to be an array of linked lists
-    int * pred;
+    int * pred; // Dijkstra's output is stored in pred and dist
     int * dist;
     unsigned int n;
 } Graph;
 
-typedef struct
+typedef struct // More pointers representing arrays
 {
     int * heap;
     int * index;
     int * key;
-    int sizePQ;
+    unsigned int sizePQ;
 } PriorityQueue;
 
-typedef struct // simplified stack implementation (sequential)
+typedef struct // simple stack implementation (sequential)
 {
     int * Vector; // pointer to int array where stack data is stored
     unsigned int Length; // number of currently occupied slots
     unsigned int Capacity; // Max length
 } Stack;
 
+// Various function declarations
 void AnnihilateList(Vertex * listhead);
 int ExtractMin(PriorityQueue * PQ);
 void PQUnderflow();
@@ -165,18 +168,13 @@ int main()
 
 	fclose(inputFile); // IMPORTANT: close the file stream
 
-    // Print G
-
-    // Run dijkstra's algorithm and print G->List
-
-    int s, p;
+    int s, p; // s will keep track of the source, p is for the parsing predecessor Traceback
     Stack predecessorTraceback; // For tracing back the path to a vector
-    int pT_vector[G->n]; // maximum of N ancestors will be stored
+    int pT_vector[G->n]; // maximum of G->n ancestors will be stored
     predecessorTraceback.Vector = pT_vector;
-    predecessorTraceback.Length = 0;
     predecessorTraceback.Capacity = G->n;
 
-    for (s = 1; s <= G->n; s++)
+    for (s = 1; s <= G->n; s++) // Do Dijkstra for each vertex
     {
         Dijkstra(G, PQ, s);
         printf("\nDIJKSTRA RESULTS >> Vertex %d as Source:\n", s);
@@ -187,57 +185,79 @@ int main()
             if (j != s)
             {
                 printf("   Vertex %d to %d: ", s, j);
-                PushToStack(&predecessorTraceback, j);
-                p = pred[j];
-                while (p)
+                switch(dist[j]) // print cost if path exists
                 {
-                    PushToStack(&predecessorTraceback, p);
-                    p = pred[p];
+                    case 0: // If dist is 0, then path does not exist
+                        printf("(NO PATH)\n", dist[j]);
+                    break;
+                    default:
+                        // add j to the stack of predecessors so it will be the final step in the 'path'
+                        PushToStack(&predecessorTraceback, j);
+                        p = pred[j]; // Trace back the path until p has no predecessor
+                        while (p)
+                        {
+                            PushToStack(&predecessorTraceback, p);
+                            p = pred[p];
+                        }
+                        // Now print the stack
+                        while (predecessorTraceback.Length > 0)
+                        {
+                            printf("%d", PopFromStack(&predecessorTraceback));
+                            if (predecessorTraceback.Length > 0)
+                            {
+                                printf(" -> ");
+                            }
+                        }
+                        printf(" (cost = %d)\n", dist[j]);
                 }
-                // Now print the stack
-                while (predecessorTraceback.Length > 0)
-                {
-                    printf("%d", PopFromStack(&predecessorTraceback));
-                    if (predecessorTraceback.Length > 0)
-                    {
-                        printf(" -> ");
-                    }
-                }
-                printf(" (cost = %d)\n", dist[j]);
             }
         }
     }
 
     // Clean up before exiting
-    //printf("\n$ Begin Cleanup Process...\n");
-    //printf("$ Iterating over list of pointers at %d...\n", list);
+    #ifdef DEBUG
+        printf("\n$ Begin Cleanup Process...\n");
+        printf("$ Iterating over list of pointers at %d...\n", list);
+    #endif
     for (i = 1; i <= G->n; i++)
     {
         AnnihilateList(list[i]);
     }
-    //printf("$ Freeing graph at %d...\n", G);
+    #ifdef DEBUG
+        printf("$ Freeing graph at %d...\n", G);
+        printf("$ Freeing priority queue at %d...\n", PQ);
+    #endif
     free(G);
-    //printf("$ Freeing priority queue at %d...\n", PQ);
     free(PQ);
     return 0;
 }
 
+// <summary>
+//     Frees up all vertices in a singly-linked list
+// </summary>
 void AnnihilateList(Vertex * listhead)
 {
     Vertex * temp1;
     while (listhead)
     {
         temp1 = listhead->NEXT;
-        //printf("$ Freeing vertex (data: VRTX = %d; COST = %d;) at %d...\n", listhead->VRTX, listhead->COST, listhead);
+        #ifdef DEBUG
+            printf("$ Freeing vertex (data: VRTX = %d; COST = %d;) at %d...\n", listhead->VRTX, listhead->COST, listhead);
+        #endif
         free(listhead);
         listhead = temp1;
     }
 }
 
+// <summary>
+//     Extracts the minimum vertex from the root of the min-heap
+//      and then re-heapifies the min-heap
+// </summary>
 int ExtractMin(PriorityQueue * PQ)
 {
     int j;
-    if (PQ->sizePQ == 0)
+    // check if there is something to extract first.
+    if (PQ->sizePQ == 0) // isEmptyPQ can be used but Quiwa didn't so...meh.
     {
         PQUnderflow();
         exit(ERR_PQ_UNDERFLOW);
@@ -245,28 +265,24 @@ int ExtractMin(PriorityQueue * PQ)
     else
     {
         j = PQ->heap[1]; // retrieve return value (min-heap's root) before replacing root
+        // put last element into root
         PQ->heap[1] = PQ->heap[PQ->sizePQ];
         PQ->index[PQ->heap[1]] = 1;
         PQ->sizePQ--;
-        Heapify(PQ, 1);
+        Heapify(PQ, 1); // run Heapify so the heap becomes a min-heap again
     }
-
-    /*int i;
-    printf("PRIORITY QUEUE:\n------------------------\n");
-    for (i = 1; i <= PQ->sizePQ; i++)
-    {
-        printf("heap: %d + key: %d, ", PQ->heap[i], PQ->key[PQ->heap[i]]);
-    }
-    printf("\n\n");*/
-
-    return j;
+    return j; // return min
 }
 
+// <summary>
+//    returns true if the priority queue is empty; false otherwise
+// </summary>
 bool isEmptyPQ(PriorityQueue * PQ)
 {
     return (PQ->sizePQ == 0);
 }
 
+// A bunch of Overflow and Underflow functions
 void PQUnderflow()
 {
     fprintf(stderr, "\nERR: Priority Queue Underflow: The min-heap is empty.\n");
@@ -282,6 +298,10 @@ void StackUnderflow()
     fprintf(stderr, "\nERR: Stack Underflow: The stack is empty. Pop operation cancelled.\n");
 }
 
+// <summary>
+//      Turns a binary tree into a min-heap starting from input r and going
+//          through the heap top-to-bottom
+// </summary>
 void Heapify(PriorityQueue * PQ, int r)
 {
     int k = PQ->key[PQ->heap[r]];
@@ -292,7 +312,7 @@ void Heapify(PriorityQueue * PQ, int r)
     {
         if ((j < PQ->sizePQ) && (PQ->key[PQ->heap[j + 1]] < PQ->key[PQ->heap[j]]))
         {
-            j += 1;
+            j++;
         }
         if (PQ->key[PQ->heap[j]] < k)
         {
@@ -306,19 +326,13 @@ void Heapify(PriorityQueue * PQ, int r)
             break;
         }
     }
-
-    /*int x;
-    printf("PRIORITY QUEUE:\n------------------------\n");
-    for (x = 1; x <= PQ->sizePQ; x++)
-    {
-        printf("heap: %d + key: %d, ", PQ->heap[x], PQ->key[PQ->heap[x]]);
-    }
-    printf("\n\n");*/
-
     PQ->heap[i] = l;
     PQ->index[l] = i;
 }
 
+// <summary>
+//     adds an int element to the top of a sequentially implemented stack
+// </summary>
 void PushToStack(Stack * S, int data)
 {
     if (S->Length == S->Capacity) // If length is same as capacity, stack is full
@@ -327,10 +341,14 @@ void PushToStack(Stack * S, int data)
     }
     else
     {
-        S->Vector[S->Length++] = data;
+        S->Vector[S->Length++] = data; // add data to the end and increase length
     }
 }
 
+// <summary>
+//     Pops from the top of a sequentially implemented stack
+//        and returns the popped integer
+// </summary>
 int PopFromStack(Stack * S)
 {
     if (S->Length == 0) // Check if stack is empty; cancel if yes
@@ -340,10 +358,16 @@ int PopFromStack(Stack * S)
     }
     else
     {
-        return S->Vector[--S->Length];
+        return S->Vector[--S->Length]; // get data from the end/"top" and decrease length
     }
 }
 
+// <summary>
+//    Decreases the key of an element in the priority queue/min-heap
+//       and resorts the queue
+//    Params: l = vertex whose key is to be changed; newkey = new key value
+//            PQ = priority queue
+// </summary>
 void DecreaseKey(PriorityQueue * PQ, int l, int newkey)
 {
     PQ->key[l] = newkey;
@@ -358,28 +382,26 @@ void DecreaseKey(PriorityQueue * PQ, int l, int newkey)
     }
     PQ->heap[i] = l;
     PQ->index[l] = i;
-    /*int x;
-    printf("PRIORITY QUEUE:\n------------------------\n");
-    for (x = 1; x <= PQ->sizePQ; x++)
-    {
-        printf("heap: %d + key: %d, ", PQ->heap[x], PQ->key[PQ->heap[x]]);
-    }
-    printf("\n\n");*/
 }
 
+// <summary>
+//    Initializes the Priority Queue
+//    Sets the first element as the source and makes its key 0
+//    Initializes all other elements/vertices with an INFINITE key
+// </summary>
 void InitPQ(Graph * G, PriorityQueue * PQ, int s)
 {
     int i = 1;
     int v;
-    for (v = 1; v <= G->n; v++)
+    for (v = 1; v <= G->n; v++) // Go through all vertices
     {
-        if (v == s)
+        if (v == s) // Set source as the root of the queue, with cost = 0
         {
             PQ->heap[1] = s;
             PQ->index[s] = 1;
             PQ->key[s] = 0;
         }
-        else
+        else // all other vertices start with INFINITE cost
         {
             i++;
             PQ->heap[i] = v;
@@ -390,63 +412,85 @@ void InitPQ(Graph * G, PriorityQueue * PQ, int s)
     PQ->sizePQ = G->n;
 }
 
+// <summary>
+//     Dijkstra - the algorithm as described by Edsger Dijkstra in 1956
+//                and as implemented by Evangel P. Quiwa in "Data Structures"
+//              - finds the shortest path from vertex s to all other vertices in G
+//              - PQ is also a necessary parameter; it is a priority queue that will be used
+//                by the algorithm
+//              - results are stored in G.dist and G.pred
+// </summary>
 void Dijkstra(Graph * G, PriorityQueue * PQ, int s)
 {
     int u, v, newval, i, j;
     Vertex * alpha;
     InitPQ(G, PQ, s); // Initialize priority queue (see definition of InitPQ)
 
-    /*printf("$ Starting Dijkstra's algorithm process...\n");
-    printf("$ INPUT:\n--------------------------\n");
-    for (i = 1; i <= G->n; i++)
-    {
-        alpha = G->List[i];
-        printf("     In G.List(%d):\n          ", i);
-        while(alpha)
+    #ifdef DEBUG
+        printf("$ Starting Dijkstra's algorithm process...\n");
+        printf("$ INPUT:\n--------------------------\n");
+        for (i = 1; i <= G->n; i++)
         {
-            printf("[VRTX: %d, COST: %d] > ", alpha->VRTX, alpha->COST);
-            alpha = alpha->NEXT;
+            alpha = G->List[i];
+            printf("     In G.List(%d):\n          ", i);
+            while(alpha)
+            {
+                printf("[VRTX: %d, COST: %d] > ", alpha->VRTX, alpha->COST);
+                alpha = alpha->NEXT;
+            }
+            printf("\n");
         }
-        printf("\n");
-    }
-    printf("\n     In G.dist: {");*/
+        printf("\n     In G.dist: {");
+    #endif
+
+    // Initialize G.dist and G.pred to arrays of zeroes
     for (i = 1; i <= G->n; i++)
     {
         G->dist[i] = 0;
         G->pred[i] = 0;
-        //printf("%d, ", G->dist[i]);
+        #ifdef DEBUG
+            printf("%d, ", G->dist[i]);
+        #endif
     }
-    //printf("}\n\n");
+    #ifdef DEBUG
+        printf("}\n\n");
+    #endif
 
     // Find shortest paths from vertex s to all other vertices
     while (isEmptyPQ(PQ) == false)
     {
-        //printf("\n+++++++++++++++++++++++++++++++++++");
         u = ExtractMin(PQ);
+        #ifdef DEBUG
+            printf("\n+++++++++++++++++++++++++++++++++++");
+            printf("\nExtracted Minimum from heap is %d.\n",u);
+        #endif
         if (PQ->key[u] == INFINITE)
         {
             fprintf(stderr, "WRNG: No more edges to consider. Dijkstra returning...");
             return;
         }
-        //printf("\n%d",u);
         alpha = G->List[u];
-        while (alpha != NULL)
+        while (alpha != NULL) // Go through all vertices to update key values
         {
-            //printf("\n----------------------------------");
             v = alpha->VRTX;
             newval = (PQ->key[u] >= INFINITE) ? alpha->COST : PQ->key[u] + alpha->COST;
-            //printf("\n > %d %d %d", v, PQ->key[v], newval);
+            #ifdef DEBUG
+                printf("\n----------------------------------");
+                printf("\n > %d %d %d", v, PQ->key[v], newval);
+            #endif
             if (PQ->key[v] > newval)
             {
                 G->pred[v] = u;
                 DecreaseKey(PQ, v, newval);
-                //printf("\n @ %d %d %d", v, PQ->key[v], newval);
-                /*printf("\n     In PQ.key: {");
-                for (i = 1; i <= PQ->sizePQ; i++)
-                {
-                    printf("%d, ", PQ->key[i]);
-                }
-                printf("}\n");*/
+                #ifdef DEBUG
+                    printf("\n @ %d %d %d", v, PQ->key[v], newval);
+                    printf("\n     In PQ.key: {");
+                    for (i = 1; i <= PQ->sizePQ; i++)
+                    {
+                        printf("%d, ", PQ->key[i]);
+                    }
+                    printf("}\n");
+                #endif
             }
             alpha = alpha->NEXT;
         }
